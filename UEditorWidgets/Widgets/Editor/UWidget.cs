@@ -206,6 +206,7 @@
         {
             object __retObject = ScriptableObject.CreateInstance(WidgetType);
             UEditorWidgetBase __castWidget = (UEditorWidgetBase)__retObject;
+            __castWidget.hideFlags = HideFlags.HideAndDontSave;
             if (Name != "")
             {
                 __castWidget.Name = Name;
