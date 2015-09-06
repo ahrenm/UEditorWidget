@@ -5,63 +5,88 @@
     using UnityEditor;
     using UnityEngine;
 
-    
-    public class UEditorPanelBase : UEditorWidgetBase
+    public class UEditorPanelBase : UEditorWidgetBase , IWidgetContainer
     {
 
-        [UWidgetProperty]
+        [UWidgetProperty("Render Children")]
         public bool ChildrenShouldRender = true;
 
 
-        public List<UEditorWidgetBase> Children = new List<UEditorWidgetBase>();
-        
-        public void AddChild(UEditorWidgetBase newChild)
+        public List<UEditorWidgetBase> _children = new List<UEditorWidgetBase>();
+
+        public void AddChild(UEditorWidgetBase addChild, bool bSilent = false)
         {
-            newChild.parent = this;
-
-            if (newChild.GetType().IsSubclassOf(typeof (UEditorWidgetBase)))
+            //newChild.parent = (IWidgetContainer)this;
+            addChild.parent = this;
+            this._children.Add(addChild);
+            if (bSilent == false)
             {
-                UEditorWidgetBase __widget = (UEditorWidgetBase)newChild;
-                if (__widget.Width == -1)
-                    __widget.Width = this.Width;
+                this.Raise_onContainerChange();
             }
-            
-            Children.Add(newChild);
-
         }
 
         public void ClearChilden()
         {
-            this.Children.Clear();
+            this._children.Clear();
         }
-
-        //public List<IUEditorWidgetRenderable> Children
 
         //Constructor
         public UEditorPanelBase(eWidgetType type) : base(type) {}
 
 
-        protected void RenderChildren()
+        public virtual void RenderChildren()
         {
             if (this.ChildrenShouldRender)
             {
-                foreach (var item in Children)
+                foreach (var item in _children)
                 {
                     item.Render();
                 }
             }
         }
 
+        /*
         protected override void WidgetRender()
         {
           
 
         }
+   */
 
+        public void RemoveChild(UEditorWidgetBase removeChild, bool bSilent = false)
+        {
+            this._children.Remove(removeChild);
+            if (bSilent == false)
+            {
+                this.Raise_onContainerChange();
+            }
+        }
+
+        public List<UEditorWidgetBase> Children
+        {
+            get
+            {
+                return _children;
+            }
+            set
+            {
+                _children = value;
+            }
+        }
+
+        public void Raise_onContainerChange()
+        {
+            if (this.onContainerChange != null)
+            {
+                this.onContainerChange(this);
+            }
+        }
+
+        public event ContainerChanged onContainerChange;
     }
 
     [UWidgetWidgetAttribute(eUWidgetDesignerCategory.Panels, "Horizontal Layout")]
-    public sealed class UEditorPanelHorizonal : UEditorPanelBase
+    public class UEditorPanelHorizonal : UEditorPanelBase
     {
 
         public UEditorPanelHorizonal() : base(eWidgetType.PanelHorizontal) 
@@ -91,7 +116,7 @@
     }
 
     [UWidgetWidgetAttribute(eUWidgetDesignerCategory.Panels, "Vertical Layout")]
-    public sealed class UEditorPanelVertical : UEditorPanelBase
+    public class UEditorPanelVertical : UEditorPanelBase
     {
 
         public UEditorPanelVertical() : base(eWidgetType.PanelVertical) 
@@ -132,7 +157,7 @@
         protected override void WidgetRender()
         {
 
-            ScrollPosition = EditorGUILayout.BeginScrollView(ScrollPosition, this.Style, GUILayout.Width(this.parent.Width + 10), GUILayout.Height(this.parent.Height + 10));
+            ScrollPosition = EditorGUILayout.BeginScrollView(ScrollPosition, this.Style, GUILayout.Width(((UEditorWidgetBase)this.parent).Width + 10), GUILayout.Height(((UEditorWidgetBase)this.parent).Height + 10));
             {
                 RenderChildren();
             }
@@ -140,9 +165,8 @@
         }
     }
 
-
     [UWidgetWidgetAttribute(eUWidgetDesignerCategory.Panels, "Area Layout")]
-    public sealed class UEditorPanelArea : UEditorPanelBase
+    public class UEditorPanelArea : UEditorPanelBase
     {
 
         public UEditorPanelArea() : base(eWidgetType.PanelArea) 
@@ -171,6 +195,5 @@
             GUILayout.EndArea();
         }
     }
-
 
 }

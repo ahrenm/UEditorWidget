@@ -1,4 +1,4 @@
-﻿namespace uAssist.UEditorWidgets
+﻿    namespace uAssist.UEditorWidgets
 {
     using System;
     using UnityEngine;
@@ -19,7 +19,7 @@
             {
                 return false;
             }
-            if (this.WidgetID == other.WidgetID)
+            if (this.ObjectID == other.ObjectID)
             {
                 return true;
             }
@@ -28,6 +28,9 @@
                 return false;
             }
         }
+
+        [UWidgetProperty(ListOptions = new string[2] { "private", "public" }, Label = "Widget Scope")]
+        public string WidgetScope = "private";
 
         
 #region Style Properties
@@ -38,7 +41,7 @@
         /// <summary>
         /// The base GUIStyle for the widget
         /// </summary>
-        [UWidgetPropertyAttribute(ListOptions = new string[4]{" ","label","textField","button"}, Label="Base GUIStyle")]
+        [UWidgetPropertyAttribute(ListOptions = new string[5]{" ","label","textField","button","toolbar"}, Label="Base GUIStyle")]
         public string BaseStyle
         {
             get 
@@ -198,7 +201,7 @@
 
         [SerializeField]
         private RectOffsetSeralizable _cachedMargin = new RectOffsetSeralizable();
-        [UWidgetPropertyAttribute(CustomEditor = typeof (UEditorControlRect))]
+        [UWidgetPropertyAttribute(CustomEditor = typeof (UEditorControlRect),PropCodeGen=typeof(CGen_RectOffsetSeralizable))]
         public RectOffsetSeralizable Margin
         {
             get
@@ -214,7 +217,7 @@
 
         [SerializeField]
         private RectOffsetSeralizable _cachedPadding = new RectOffsetSeralizable();
-        [UWidgetPropertyAttribute(CustomEditor = typeof(UEditorControlRect))]
+        [UWidgetPropertyAttribute(CustomEditor = typeof(UEditorControlRect), PropCodeGen = typeof(CGen_RectOffsetSeralizable))]
         public RectOffsetSeralizable Padding
         {
             get 
@@ -230,7 +233,7 @@
 
         [SerializeField]
         private RectOffsetSeralizable _cachedBorder = new RectOffsetSeralizable();
-        [UWidgetPropertyAttribute(CustomEditor = typeof(UEditorControlRect))]
+        [UWidgetPropertyAttribute(CustomEditor = typeof(UEditorControlRect), PropCodeGen = typeof(CGen_RectOffsetSeralizable))]
         public RectOffsetSeralizable Border
         {
             get
@@ -357,7 +360,7 @@
             {
                 if (this.LayoutMode == ePositioningLayout.Layout)
                 {
-                    return parent.GlobalPosition() + new Vector2(this.LastLayoutRect.x, this.LastLayoutRect.y);
+                    return ((UEditorWidgetBase)parent).GlobalPosition() + new Vector2(this.LastLayoutRect.x, this.LastLayoutRect.y);
                 }
                 else
                 {

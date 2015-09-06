@@ -4,15 +4,16 @@
     using UnityEditor;
     using UnityEngine;
     using System.Linq;
-    using UEditorWidgets;
     using System.Reflection;
     using System.Collections;
     using System.Collections.Generic;
     using System.Text.RegularExpressions;
+    using uAssist.Forms;
 
     /// <summary>
     /// Assigned to widget properties to make them editable to the designer
     /// </summary>
+    [Serializable]
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
     public class UWidgetPropertyAttribute : Attribute
     {
@@ -25,6 +26,8 @@
         public bool HideInProperties = false;
         public Type CustomEditor = null;
         public string Label = "";
+        public Type PropCodeGen;
+        public bool BuildProperty = true;
     }
 
     [AttributeUsage(AttributeTargets.Class,AllowMultiple=false,Inherited=true)]
@@ -40,6 +43,13 @@
         public string DesignerLabel = "";
     }
 
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false,Inherited = true)]
+    public class UWidgetFormAttribute : Attribute
+    {
+        public bool CanEditInDesigner = true;
+        public string Title = string.Empty;
+    }
+
     public enum eUWidgetDesignerCategory
     {
         NotSet = 0,
@@ -50,6 +60,36 @@
         Other = 5
     }
 
+    /// <summary>
+    /// A garbage collector for expired widgets
+    /// The GC runs at AppDomain reload. Each .NET widget instance is valid only for the AppDomain cycle it was created in.
+    /// At 'Uwidget.Create()' & at GC time, we set widget instances to expire at the NEXT GC run
+    /// </summary>
+    [InitializeOnLoad]
+    public static class UWidgetGC
+    {
+        [InitializeOnLoadMethod]
+        public static void RunGC()
+        {
+            int __widgetsDestroyed = 0;
+
+            var __widgetsInMemory = Resources.FindObjectsOfTypeAll<UEditorWidgetBase>().ToList<UEditorWidgetBase>();
+
+            foreach (var __searchWidget in __widgetsInMemory)
+            {
+                if (__searchWidget.RemoveAtGC)
+                {
+                    ScriptableObject.DestroyImmediate(__searchWidget);
+                    __widgetsDestroyed++;
+                }
+                else
+                {
+                    __searchWidget.RemoveAtGC = true;
+                }
+            }
+            Debug.Log("Widgets destroyed->" + __widgetsDestroyed.ToString());
+        }
+    }
 
     /// <summary>
     /// Widget clickable scaffolding
@@ -59,6 +99,9 @@
         event UEditorWidget_OnClick OnClick;
     }
     public delegate void UEditorWidget_OnClick(IUEditorWidgetClickable sender, EventArgs e);
+
+    public delegate void UEditorWidget_MenuItemSelected(UEditorWidgetBase sender, string SelectedMenuItem);
+    public delegate void UEditorWidget_MenuItemChanged(UEditorWidgetBase sender, int indexUpdated);
 
     //TODO: Get rid of this entirely
     public enum eWidgetType
@@ -86,7 +129,24 @@
         Layout = 3
     }
 
-    
+    public interface IWidgetContainer
+    {
+        void AddChild (UEditorWidgetBase addChild, bool bSilent = false);
+        void RemoveChild(UEditorWidgetBase removeChild, bool bSilent = false);
+        List<UEditorWidgetBase> Children { get; set; }
+        void RenderChildren();
+        event ContainerChanged onContainerChange;
+        int ObjectID { get; set; }
+        void Raise_onContainerChange();
+    }
+    public delegate void ContainerChanged(IWidgetContainer sender);
+
+
+    public interface ICodeGenerator
+    {
+        string CGenInitalizer(); //TODO: remove if not implemented
+        List<string> CGenPropertySetters(string PropFQN, object PropValue);
+    }
 
     //My thanks to Unity for making RectOffset both sealed and not marked as seralizable
     //So we do this junk.
@@ -197,38 +257,82 @@
 
 #region Static Methods
 
+        /// <summary>
+        /// A flag to tell Unity if created widget should be flagged for seralization.
+        /// Is enabled by default. Disable to improve editor performance during design work.
+        /// </summary>
+        public static bool SeralizationEnabled = true;
+
         public static T Create<T>(string Name = "", bool bSuppressBindingWarnings = false) where T : UEditorWidgetBase
         {
             return (T)UWidget.Create(typeof(T), Name,bSuppressBindingWarnings);
         }
 
+        /// <summary>
+        /// This is the main function used to create widgets
+        /// </summary>
+        /// <param name="WidgetType"></param>
+        /// <param name="Name"></param>
+        /// <param name="bSuppressBindingWarnings"></param>
+        /// <returns></returns>
         public static UEditorWidgetBase Create(Type WidgetType, string Name = "", bool bSuppressBindingWarnings = false)
         {
             object __retObject = ScriptableObject.CreateInstance(WidgetType);
             UEditorWidgetBase __castWidget = (UEditorWidgetBase)__retObject;
-            __castWidget.hideFlags = HideFlags.HideAndDontSave;
+            if (UWidget.SeralizationEnabled)
+            {
+                __castWidget.hideFlags = HideFlags.HideAndDontSave;
+            }
             if (Name != "")
             {
                 __castWidget.Name = Name;
             }
             __castWidget.SuppressBindingWarnings = bSuppressBindingWarnings;
+            __castWidget.RemoveAtGC = true;
             return __castWidget;
         }
 
-        public static UEditorWidgetBase FindWidgetById(List<UEditorWidgetBase> RenderableWidgets, string WidgetID)
+        /// <summary>
+        /// Used to 'flatten' a string into a code friendly identifier
+        /// </summary>
+        /// <param name="stringToFlatten"></param>
+        /// <returns></returns>
+        public static string FlattenString(string stringToFlatten)
+        {
+            return Regex.Replace(stringToFlatten, "[^a-zA-Z0-9%_]", string.Empty);
+        }
+
+        //public static UEditorWidgetBase FindWidgetById(List<UEditorWidgetBase> RenderableWidgets, int WidgetID)
+        public static UEditorWidgetBase FindWidgetById(IWidgetContainer Container, int WidgetID)
         {
             UEditorWidgetBase __retValue = null;
 
-            foreach (var __widget in RenderableWidgets)
+            //If the container itself is the widget we are searching for
+            if (Container.ObjectID == WidgetID)
             {
-                if (((UEditorWidgetBase)__widget).WidgetID == WidgetID)
+                if (Container.GetType().IsSubclassOf(typeof (UEditorWidgetBase)))
+                {
+                    return (UEditorWidgetBase)Container;
+                }
+                else
+                {
+                    throw new Exception("FindWidgetById is unable to cast to " + Container.GetType().Name);
+                }
+            }
+
+            //Loop through all children in the container
+            foreach (var __widget in Container.Children)
+            {
+                
+                if (__widget.ObjectID == WidgetID)
                 {
                     return (UEditorWidgetBase)__widget;
                 }
 
+                //TODO: Update this to loop on the IWidgetContainer interface
                 if (__widget.GetType().IsSubclassOf(typeof(UEditorPanelBase)))
                 {
-                    UEditorWidgetBase __subSearchResult = UWidget.FindWidgetById(((UEditorPanelBase)__widget).Children, WidgetID);
+                    UEditorWidgetBase __subSearchResult = UWidget.FindWidgetById((IWidgetContainer)__widget, WidgetID);
                     if (__subSearchResult != null)
                     {
                         return __subSearchResult;
@@ -238,6 +342,8 @@
             return __retValue;
         }
 
+
+        //TODO: Find a new home for this function
         public static bool TryGetEnumOptions<T>(out List<string> _enumOptions)
         {
             try
@@ -256,14 +362,20 @@
 #endregion
 
         //The unique ideintifier for thie widget
-        public string WidgetID;
+        public int ObjectID
+        {
+            get;
+            set;
+        }
 
         //Public constructor
-        public UWidget()
+        public UWidget() :base()
         {
-            //TODO: Think about a less cpu intensive way of generating a unique identifier
-            WidgetID = Guid.NewGuid().ToString();
+            ObjectID = this.GetInstanceID();
         }
+
+        //See class UWidgetGC for details  
+        public bool RemoveAtGC = false;
 
         private string _name = "WidgetControl";
         [UWidgetPropertyAttribute]
@@ -321,6 +433,10 @@
         {
             get
             {
+                if (this._boundMemberObject == null && this._boundGameObjectID != -1)
+                {
+                    this.BindTo(EditorUtility.InstanceIDToObject(this._boundGameObjectID), this._boundMemberName);
+                }
                 return _boundMemberObject;
             }
         }
@@ -392,6 +508,10 @@
                     throw new Exception("Unexpected binding type in UEditorWidget.GetBoundValue<T>");
             }
 
+            if (__refObject == null)
+            {
+                Debug.Log("Break");
+            }
 
             if (__refObject.GetType() == typeof(T) || __refObject.GetType().IsSubclassOf(typeof(T)))
             {
@@ -567,17 +687,34 @@
 #endregion
 
         [SerializeField]
-        private UEditorPanelBase _parent;
+        private IWidgetContainer _parent;
+        [SerializeField]
+        private int _parentObjectID = -1;
 
-        public UEditorPanelBase parent
+        /// <summary>
+        /// A reference to the parent container.
+        /// Unity hates seralizing interfaces, more than it hates polymorphic objects, so we do some nasty in here
+        /// </summary>
+        public IWidgetContainer parent
         {
-            get { return _parent; }
-            set { _parent = value; }
+            get
+            {
+                if (_parent == null && _parentObjectID != -1)
+                {
+                    _parent = (IWidgetContainer)EditorUtility.InstanceIDToObject(_parentObjectID);
+                }
+                return _parent;
+            }
+            set 
+            {
+                _parent = value;
+                _parentObjectID = ((UnityEngine.Object)_parent).GetInstanceID();
+            }
         }
 
         public override int GetHashCode()
         {
-            return Convert.ToInt32(this.WidgetID);
+            return Convert.ToInt32(this.ObjectID);
         }
 
     }

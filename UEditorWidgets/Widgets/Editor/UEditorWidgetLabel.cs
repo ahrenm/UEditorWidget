@@ -5,7 +5,7 @@
     using System.Collections.Generic;
     using UnityEditor;
     using UnityEngine;
-
+    
     [UWidgetWidgetAttribute(eUWidgetDesignerCategory.Widgets, "Label")]
     public class UEditorWidgetLabel : UEditorWidgetTextBase
     {

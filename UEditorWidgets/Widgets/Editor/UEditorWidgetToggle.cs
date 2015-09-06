@@ -12,16 +12,18 @@
         public UEditorWidgetToggle() : base(eWidgetType.Generic)
         {
             this.Name = "WidgetToggle";
+            this.Width = 16;
+            this.Height = 16;
         }
 
         public override bool BindTo(object Object, string MemberName)
         {
-            if (Object.GetType() != typeof(bool))
+            if (base.BindTo(Object, MemberName) == false)
             {
                 return false;
             }
 
-            if (base.BindTo(Object, MemberName) == false)
+            if (this.GetBoundValueType() != typeof(bool))
             {
                 return false;
             }

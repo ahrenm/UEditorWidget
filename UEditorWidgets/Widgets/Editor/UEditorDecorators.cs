@@ -5,7 +5,7 @@
     using System.Collections.Generic;
     using UnityEditor;
     using UnityEngine;
-    
+
     [UWidgetWidgetAttribute(eUWidgetDesignerCategory.Decorators,"Seperator Line")]
     public sealed class UEditorDecoratorSeperator : UEditorWidgetBase
     {

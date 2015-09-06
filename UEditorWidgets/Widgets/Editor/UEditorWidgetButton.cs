@@ -7,11 +7,8 @@
     using UnityEngine;
 
     [UWidgetWidgetAttribute(eUWidgetDesignerCategory.Widgets, "Button")]
-    public class UEditorWidgetButton : UEditorWidgetLabel, IUEditorWidgetClickable
+    public class UEditorWidgetButton : UEditorWidgetTextBase, IUEditorWidgetClickable
     {
-        protected object _boundOnClickObject = null;
-        protected string _boundOnClickMethodName;
-
 
         protected EventArgs ClickArgs = null;
 
@@ -25,7 +22,33 @@
             this.Height = EditorGUIUtility.singleLineHeight;
         }
 
+        public override bool BindTo(object Object, string MemberName)
+        {
+            return base.BindTo(Object, MemberName);
+        }
 
+        [SerializeField]
+        private string _label = string.Empty;
+
+        [UWidgetPropertyAttribute("Label")]
+        public string Label
+        {
+            get
+            {
+                if (this.BoundObject != null && this.GetBoundValueType() == typeof(string))
+                {
+                    return this.GetBoundValue<string>();
+                }
+                else
+                {
+                    return _label;
+                }
+            }
+            set
+            {
+                _label = value;
+            }
+        }
 
         protected void Invoke_OnClick()
         {
